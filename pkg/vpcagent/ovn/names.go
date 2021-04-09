@@ -89,3 +89,10 @@ func netMdpName(netId string) string {
 func gnpName(netId string, ifname string) string {
 	return fmt.Sprintf("iface-%s-%s", netId, ifname)
 }
+
+// lbpName returns Logical_Switch_Port name for loadbalancer
+//
+// The name must match what's going to be set on each chassis
+func lbpName(lbId string) string {
+	return fmt.Sprintf("iface/lb/%s", lbId)
+}
