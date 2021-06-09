@@ -1448,6 +1448,8 @@ func (self *SKVMRegionDriver) RequestAssociateEip(ctx context.Context, userCred 
 		switch input.InstanceType {
 		case api.EIP_ASSOCIATE_TYPE_SERVER:
 			return self.requestAssociateEipWithServer(ctx, userCred, eip, input, obj, task)
+		case api.EIP_ASSOCIATE_TYPE_LOADBALANCER:
+			return self.requestAssociateEipWithLoadbalancer(ctx, userCred, eip, input, obj, task)
 		default:
 			return nil, errors.Wrapf(cloudprovider.ErrNotSupported, "unsupported instance type %q", input.InstanceType)
 		}
@@ -1497,6 +1499,33 @@ func (self *SKVMRegionDriver) requestAssociateEipWithServer(ctx context.Context,
 
 	if err := eip.AssociateInstance(ctx, userCred, api.EIP_ASSOCIATE_TYPE_SERVER, guest); err != nil {
 		return nil, errors.Wrapf(err, "associate eip %s(%s) to vm %s(%s)", eip.Name, eip.Id, guest.Name, guest.Id)
+	}
+	if err := eip.SetStatus(userCred, api.EIP_STATUS_READY, api.EIP_STATUS_ASSOCIATE); err != nil {
+		return nil, errors.Wrapf(err, "set eip status to %s", api.EIP_STATUS_ALLOCATE)
+	}
+	return nil, nil
+}
+
+func (self *SKVMRegionDriver) requestAssociateEipWithLoadbalancer(
+	ctx context.Context,
+	userCred mcclient.TokenCredential,
+	eip *models.SElasticip,
+	input api.ElasticipAssociateInput,
+	obj db.IStatusStandaloneModel,
+	task taskman.ITask,
+) (jsonutils.JSONObject, error) {
+	lb := obj.(*models.SLoadbalancer)
+
+	if _, err := db.Update(lb, func() error {
+		lb.Address = eip.IpAddr
+		lb.AddressType = api.LB_ADDR_TYPE_INTERNET
+		return nil
+	}); err != nil {
+		return nil, errors.Wrap(err, "set loadbalancer address")
+	}
+
+	if err := eip.AssociateLoadbalancer(ctx, userCred, lb); err != nil {
+		return nil, errors.Wrapf(err, "associate eip %s(%s) to loadbalancer %s(%s)", eip.Name, eip.Id, lb.Name, lb.Id)
 	}
 	if err := eip.SetStatus(userCred, api.EIP_STATUS_READY, api.EIP_STATUS_ASSOCIATE); err != nil {
 		return nil, errors.Wrapf(err, "set eip status to %s", api.EIP_STATUS_ALLOCATE)
