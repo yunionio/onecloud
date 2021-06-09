@@ -80,6 +80,14 @@ func (self *EipAssociateTask) GetAssociateObj() (db.IStatusStandaloneModel, api.
 		nat := natObj.(*models.SNatGateway)
 		input.InstanceExternalId = nat.ExternalId
 		return nat, input, nil
+	case api.EIP_ASSOCIATE_TYPE_LOADBALANCER:
+		obj, err := models.LoadbalancerManager.FetchById(input.InstanceId)
+		if err != nil {
+			return nil, input, errors.Wrapf(err, "LoadbalancerManager.FetchById(%s)", input.InstanceId)
+		}
+		m := obj.(*models.SLoadbalancer)
+		input.InstanceExternalId = m.ExternalId
+		return m, input, nil
 	default:
 		return nil, input, fmt.Errorf("invalid instance type %s", input.InstanceType)
 	}
@@ -121,8 +129,9 @@ func (self *EipAssociateTask) OnAssociateEipComplete(ctx context.Context, obj db
 			m.StartSyncstatus(ctx, self.UserCred, "")
 		}
 		if act, ok := map[string]string{
-			api.EIP_ASSOCIATE_TYPE_SERVER:      logclient.ACT_VM_ASSOCIATE,
-			api.EIP_ASSOCIATE_TYPE_NAT_GATEWAY: logclient.ACT_NATGATEWAY_ASSOCIATE,
+			api.EIP_ASSOCIATE_TYPE_SERVER:       logclient.ACT_VM_ASSOCIATE,
+			api.EIP_ASSOCIATE_TYPE_NAT_GATEWAY:  logclient.ACT_NATGATEWAY_ASSOCIATE,
+			api.EIP_ASSOCIATE_TYPE_LOADBALANCER: logclient.ACT_LOADBALANCER_ASSOCIATE,
 		}[input.InstanceType]; ok {
 			logclient.AddActionLogWithStartable(self, eip, act, ins, self.UserCred, true)
 		}
