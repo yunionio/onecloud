@@ -1443,7 +1443,7 @@ func (self *SKVMRegionDriver) GetMaxElasticcacheSecurityGroupCount() int {
 	return 0
 }
 
-func (self *SKVMRegionDriver) RequestAssociatEip(ctx context.Context, userCred mcclient.TokenCredential, eip *models.SElasticip, input api.ElasticipAssociateInput, obj db.IStatusStandaloneModel, task taskman.ITask) error {
+func (self *SKVMRegionDriver) RequestAssociateEip(ctx context.Context, userCred mcclient.TokenCredential, eip *models.SElasticip, input api.ElasticipAssociateInput, obj db.IStatusStandaloneModel, task taskman.ITask) error {
 	taskman.LocalTaskRun(task, func() (jsonutils.JSONObject, error) {
 		if input.InstanceType != api.EIP_ASSOCIATE_TYPE_SERVER {
 			return nil, errors.Wrapf(cloudprovider.ErrNotSupported, "instance type %s", input.InstanceType)
