@@ -25,6 +25,7 @@ import (
 	"yunion.io/x/onecloud/pkg/cloudcommon/db"
 	"yunion.io/x/onecloud/pkg/cloudcommon/db/taskman"
 	"yunion.io/x/onecloud/pkg/compute/models"
+	"yunion.io/x/onecloud/pkg/mcclient"
 	"yunion.io/x/onecloud/pkg/util/logclient"
 )
 
@@ -114,15 +115,16 @@ func (self *EipAssociateTask) OnAssociateEipComplete(ctx context.Context, obj db
 
 	ins, input, err := self.GetAssociateObj()
 	if err == nil {
-		switch input.InstanceType {
-		case api.EIP_ASSOCIATE_TYPE_SERVER:
-			server := ins.(*models.SGuest)
-			server.StartSyncstatus(ctx, self.UserCred, "")
-			logclient.AddActionLogWithStartable(self, eip, logclient.ACT_VM_ASSOCIATE, ins, self.UserCred, true)
-		case api.EIP_ASSOCIATE_TYPE_NAT_GATEWAY:
-			nat := ins.(*models.SNatGateway)
-			nat.StartSyncstatus(ctx, self.UserCred, "")
-			logclient.AddActionLogWithStartable(self, eip, logclient.ACT_NATGATEWAY_ASSOCIATE, ins, self.UserCred, true)
+		if m, ok := ins.(interface {
+			StartSyncstatus(ctx context.Context, userCred mcclient.TokenCredential, parentTaskId string) error
+		}); ok {
+			m.StartSyncstatus(ctx, self.UserCred, "")
+		}
+		if act, ok := map[string]string{
+			api.EIP_ASSOCIATE_TYPE_SERVER:      logclient.ACT_VM_ASSOCIATE,
+			api.EIP_ASSOCIATE_TYPE_NAT_GATEWAY: logclient.ACT_NATGATEWAY_ASSOCIATE,
+		}[input.InstanceType]; ok {
+			logclient.AddActionLogWithStartable(self, eip, act, ins, self.UserCred, true)
 		}
 		logclient.AddActionLogWithStartable(self, ins, logclient.ACT_EIP_ASSOCIATE, nil, self.UserCred, true)
 	}
