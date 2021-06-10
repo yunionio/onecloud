@@ -65,25 +65,25 @@ func (self *EipAssociateTask) GetAssociateObj() (db.IStatusStandaloneModel, api.
 
 	switch input.InstanceType {
 	case api.EIP_ASSOCIATE_TYPE_SERVER:
-		vmObj, err := models.GuestManager.FetchById(input.InstanceId)
+		vmObj, err := db.FetchByIdOrName(models.GuestManager, self.UserCred, input.InstanceId)
 		if err != nil {
-			return nil, input, errors.Wrapf(err, "GuestManager.FetchById(%s)", input.InstanceId)
+			return nil, input, errors.Wrapf(err, "GuestManager.FetchByIdOrName(%q)", input.InstanceId)
 		}
 		vm := vmObj.(*models.SGuest)
 		input.InstanceExternalId = vm.ExternalId
 		return vm, input, nil
 	case api.EIP_ASSOCIATE_TYPE_NAT_GATEWAY:
-		natObj, err := models.NatGatewayManager.FetchById(input.InstanceId)
+		natObj, err := db.FetchByIdOrName(models.NatGatewayManager, self.UserCred, input.InstanceId)
 		if err != nil {
-			return nil, input, errors.Wrapf(err, "NatGatewayManager.FetchById(%s)", input.InstanceId)
+			return nil, input, errors.Wrapf(err, "NatGatewayManager.FetchByIdOrName(%q)", input.InstanceId)
 		}
 		nat := natObj.(*models.SNatGateway)
 		input.InstanceExternalId = nat.ExternalId
 		return nat, input, nil
 	case api.EIP_ASSOCIATE_TYPE_LOADBALANCER:
-		obj, err := models.LoadbalancerManager.FetchById(input.InstanceId)
+		obj, err := db.FetchByIdOrName(models.LoadbalancerManager, self.UserCred, input.InstanceId)
 		if err != nil {
-			return nil, input, errors.Wrapf(err, "LoadbalancerManager.FetchById(%s)", input.InstanceId)
+			return nil, input, errors.Wrapf(err, "LoadbalancerManager.FetchByIdOrName(%q)", input.InstanceId)
 		}
 		m := obj.(*models.SLoadbalancer)
 		input.InstanceExternalId = m.ExternalId
