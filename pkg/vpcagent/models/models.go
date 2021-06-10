@@ -60,10 +60,11 @@ func (el *Wire) Copy() *Wire {
 type Network struct {
 	compute_models.SNetwork
 
-	Vpc           *Vpc          `json:"-"`
-	Wire          *Wire         `json:"-"`
-	Guestnetworks Guestnetworks `json:"-"`
-	Elasticips    Elasticips    `json:"-"`
+	Vpc                  *Vpc                 `json:"-"`
+	Wire                 *Wire                `json:"-"`
+	Guestnetworks        Guestnetworks        `json:"-"`
+	LoadbalancerNetworks LoadbalancerNetworks `json:"-"`
+	Elasticips           Elasticips           `json:"-"`
 }
 
 func (el *Network) Copy() *Network {
@@ -170,8 +171,9 @@ func (el *SecurityGroupRule) Copy() *SecurityGroupRule {
 type Elasticip struct {
 	compute_models.SElasticip
 
-	Network      *Network      `json:"-"`
-	Guestnetwork *Guestnetwork `json:"-"`
+	Network             *Network             `json:"-"`
+	Guestnetwork        *Guestnetwork        `json:"-"`
+	LoadbalancerNetwork *LoadbalancerNetwork `json:"-"`
 }
 
 func (el *Elasticip) Copy() *Elasticip {
@@ -187,5 +189,18 @@ type DnsRecord struct {
 func (el *DnsRecord) Copy() *DnsRecord {
 	return &DnsRecord{
 		SDnsRecord: el.SDnsRecord,
+	}
+}
+
+type LoadbalancerNetwork struct {
+	compute_models.SLoadbalancerNetwork
+
+	Network   *Network   `json:"-"`
+	Elasticip *Elasticip `json:"-"`
+}
+
+func (el *LoadbalancerNetwork) Copy() *LoadbalancerNetwork {
+	return &LoadbalancerNetwork{
+		SLoadbalancerNetwork: el.SLoadbalancerNetwork,
 	}
 }
