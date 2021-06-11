@@ -256,6 +256,8 @@ github.com/coredns/coredns/plugin/reload
 github.com/coredns/coredns/plugin/test
 github.com/coredns/coredns/plugin/trace
 github.com/coredns/coredns/request
+# github.com/coreos/go-iptables v0.6.0
+github.com/coreos/go-iptables/iptables
 # github.com/coreos/go-semver v0.2.0
 github.com/coreos/go-semver/semver
 # github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
