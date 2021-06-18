@@ -122,7 +122,7 @@ require (
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/tredoe/osutil v0.0.0-20161130133508-7d3ee1afa71c
 	github.com/vishvananda/netlink v1.0.0
-	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
+	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
 	github.com/vmware/govmomi v0.20.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200819165624-17cef6e3e9d5
