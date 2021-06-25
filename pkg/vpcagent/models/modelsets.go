@@ -37,7 +37,9 @@ type ModelSetsMaxUpdatedAt struct {
 
 	RouteTables time.Time
 
-	LoadbalancerNetworks time.Time
+	LoadbalancerNetworks  time.Time
+	LoadbalancerListeners time.Time
+	LoadbalancerAcls      time.Time
 }
 
 func NewModelSetsMaxUpdatedAt() *ModelSetsMaxUpdatedAt {
@@ -58,7 +60,9 @@ func NewModelSetsMaxUpdatedAt() *ModelSetsMaxUpdatedAt {
 
 		RouteTables: apihelper.PseudoZeroTime,
 
-		LoadbalancerNetworks: apihelper.PseudoZeroTime,
+		LoadbalancerNetworks:  apihelper.PseudoZeroTime,
+		LoadbalancerListeners: apihelper.PseudoZeroTime,
+		LoadbalancerAcls:      apihelper.PseudoZeroTime,
 	}
 }
 
@@ -79,7 +83,9 @@ type ModelSets struct {
 
 	RouteTables RouteTables
 
-	LoadbalancerNetworks LoadbalancerNetworks
+	LoadbalancerNetworks  LoadbalancerNetworks
+	LoadbalancerListeners LoadbalancerListeners
+	LoadbalancerAcls      LoadbalancerAcls
 }
 
 func NewModelSets() *ModelSets {
@@ -100,7 +106,9 @@ func NewModelSets() *ModelSets {
 
 		RouteTables: RouteTables{},
 
-		LoadbalancerNetworks: LoadbalancerNetworks{},
+		LoadbalancerNetworks:  LoadbalancerNetworks{},
+		LoadbalancerListeners: LoadbalancerListeners{},
+		LoadbalancerAcls:      LoadbalancerAcls{},
 	}
 }
 
@@ -124,6 +132,8 @@ func (mss *ModelSets) ModelSetList() []apihelper.IModelSet {
 		mss.RouteTables,
 
 		mss.LoadbalancerNetworks,
+		mss.LoadbalancerListeners,
+		mss.LoadbalancerAcls,
 	}
 }
 
@@ -149,7 +159,9 @@ func (mss *ModelSets) copy_() *ModelSets {
 
 		RouteTables: mss.RouteTables.Copy().(RouteTables),
 
-		LoadbalancerNetworks: mss.LoadbalancerNetworks.Copy().(LoadbalancerNetworks),
+		LoadbalancerNetworks:  mss.LoadbalancerNetworks.Copy().(LoadbalancerNetworks),
+		LoadbalancerListeners: mss.LoadbalancerListeners.Copy().(LoadbalancerListeners),
+		LoadbalancerAcls:      mss.LoadbalancerAcls.Copy().(LoadbalancerAcls),
 	}
 	return mssCopy
 }
@@ -203,6 +215,8 @@ func (mss *ModelSets) join() bool {
 	p = append(p, mss.Guestnetworks.joinElasticips(mss.Elasticips))
 	p = append(p, mss.Guestnetworks.joinNetworkAddresses(mss.NetworkAddresses))
 	p = append(p, mss.LoadbalancerNetworks.joinElasticips(mss.Elasticips))
+	p = append(p, mss.LoadbalancerNetworks.joinLoadbalancerListeners(mss.LoadbalancerListeners))
+	p = append(p, mss.LoadbalancerListeners.joinLoadbalancerAcls(mss.LoadbalancerAcls))
 	for _, b := range p {
 		if !b {
 			return false
