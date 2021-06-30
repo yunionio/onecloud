@@ -144,6 +144,7 @@ type SWafRule struct {
 	Statements         []SWafStatement
 }
 
+// +onecloud:model-api-gen
 type SWafStatement struct {
 	// 管理规则组名称
 	ManagedRuleGroupName string `width:"64" charset:"utf8" nullable:"false" list:"user"`
@@ -204,6 +205,7 @@ func (self SWafStatement) GetExternalId() string {
 	return self.GetGlobalId()
 }
 
+// +onecloud:model-api-gen
 type DefaultAction struct {
 	// Allow, Block, Log, Count, Alert, Detection, Prevention
 	Action TWafAction
@@ -220,6 +222,7 @@ type DefaultAction struct {
 
 type WafSourceIps []string
 
+// +onecloud:model-api-gen
 type WafRegexPatterns []string
 
 func (self WafRegexPatterns) IsZero() bool {
@@ -230,6 +233,7 @@ func (self WafRegexPatterns) String() string {
 	return jsonutils.Marshal(self).String()
 }
 
+// +onecloud:model-api-gen
 type WafAddresses []string
 
 func (self WafAddresses) IsZero() bool {

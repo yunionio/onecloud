@@ -1997,10 +1997,6 @@ func (self *SDisk) getMoreDetails(ctx context.Context, userCred mcclient.TokenCr
 	return out
 }
 
-func (self *SDisk) GetExtraDetails(ctx context.Context, userCred mcclient.TokenCredential, query jsonutils.JSONObject, isList bool) (api.DiskDetails, error) {
-	return api.DiskDetails{}, nil
-}
-
 func (manager *SDiskManager) FetchCustomizeColumns(
 	ctx context.Context,
 	userCred mcclient.TokenCredential,
