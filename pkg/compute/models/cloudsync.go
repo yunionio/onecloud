@@ -89,13 +89,19 @@ func isInCache(pairs []sStoragecacheSyncPair, localCacheId string) bool {
 }
 
 func syncRegionQuotas(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, driver cloudprovider.ICloudProvider, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion) error {
-	quotas, err := remoteRegion.GetICloudQuotas()
+	quotas, err := func() ([]cloudprovider.ICloudQuota, error) {
+		defer syncResults.AddRequestCost(CloudproviderQuotaManager)()
+		return remoteRegion.GetICloudQuotas()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetICloudQuotas for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return err
 	}
-	result := CloudproviderQuotaManager.SyncQuotas(ctx, userCred, provider.GetOwnerId(), provider, localRegion, api.CLOUD_PROVIDER_QUOTA_RANGE_CLOUDREGION, quotas)
+	result := func() compare.SyncResult {
+		defer syncResults.AddSqlCost(CloudproviderQuotaManager)()
+		return CloudproviderQuotaManager.SyncQuotas(ctx, userCred, provider.GetOwnerId(), provider, localRegion, api.CLOUD_PROVIDER_QUOTA_RANGE_CLOUDREGION, quotas)
+	}()
 	syncResults.Add(CloudproviderQuotaManager, result)
 	msg := result.Result()
 	notes := fmt.Sprintf("SyncQuotas for region %s result: %s", localRegion.Name, msg)
@@ -107,13 +113,19 @@ func syncRegionQuotas(ctx context.Context, userCred mcclient.TokenCredential, sy
 }
 
 func syncRegionZones(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion) ([]SZone, []cloudprovider.ICloudZone, error) {
-	zones, err := remoteRegion.GetIZones()
+	zones, err := func() ([]cloudprovider.ICloudZone, error) {
+		defer syncResults.AddRequestCost(ZoneManager)()
+		return remoteRegion.GetIZones()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetZones for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return nil, nil, err
 	}
-	localZones, remoteZones, result := ZoneManager.SyncZones(ctx, userCred, localRegion, zones)
+	localZones, remoteZones, result := func() ([]SZone, []cloudprovider.ICloudZone, compare.SyncResult) {
+		defer syncResults.AddSqlCost(ZoneManager)()
+		return ZoneManager.SyncZones(ctx, userCred, localRegion, zones)
+	}()
 	syncResults.Add(ZoneManager, result)
 	msg := result.Result()
 	notes := fmt.Sprintf("SyncZones for region %s result: %s", localRegion.Name, msg)
@@ -169,14 +181,20 @@ func syncRegionSkus(ctx context.Context, userCred mcclient.TokenCredential, loca
 }
 
 func syncRegionEips(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	eips, err := remoteRegion.GetIEips()
+	eips, err := func() ([]cloudprovider.ICloudEIP, error) {
+		defer syncResults.AddRequestCost(ElasticipManager)()
+		return remoteRegion.GetIEips()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIEips for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
 
-	result := ElasticipManager.SyncEips(ctx, userCred, provider, localRegion, eips, provider.GetOwnerId())
+	result := func() compare.SyncResult {
+		defer syncResults.AddSqlCost(ElasticipManager)()
+		return ElasticipManager.SyncEips(ctx, userCred, provider, localRegion, eips, provider.GetOwnerId())
+	}()
 
 	syncResults.Add(ElasticipManager, result)
 
@@ -189,14 +207,20 @@ func syncRegionEips(ctx context.Context, userCred mcclient.TokenCredential, sync
 }
 
 func syncRegionBuckets(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion) {
-	buckets, err := remoteRegion.GetIBuckets()
+	buckets, err := func() ([]cloudprovider.ICloudBucket, error) {
+		defer syncResults.AddRequestCost(BucketManager)()
+		return remoteRegion.GetIBuckets()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIBuckets for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
 
-	result := BucketManager.syncBuckets(ctx, userCred, provider, localRegion, buckets)
+	result := func() compare.SyncResult {
+		defer syncResults.AddSqlCost(BucketManager)()
+		return BucketManager.syncBuckets(ctx, userCred, provider, localRegion, buckets)
+	}()
 
 	syncResults.Add(BucketManager, result)
 
@@ -211,14 +235,20 @@ func syncRegionBuckets(ctx context.Context, userCred mcclient.TokenCredential, s
 }
 
 func syncRegionVPCs(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	vpcs, err := remoteRegion.GetIVpcs()
+	vpcs, err := func() ([]cloudprovider.ICloudVpc, error) {
+		defer syncResults.AddRequestCost(VpcManager)()
+		return remoteRegion.GetIVpcs()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetVpcs for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
 
-	localVpcs, remoteVpcs, result := VpcManager.SyncVPCs(ctx, userCred, provider, localRegion, vpcs)
+	localVpcs, remoteVpcs, result := func() ([]SVpc, []cloudprovider.ICloudVpc, compare.SyncResult) {
+		defer syncResults.AddSqlCost(VpcManager)()
+		return VpcManager.SyncVPCs(ctx, userCred, provider, localRegion, vpcs)
+	}()
 
 	syncResults.Add(VpcManager, result)
 
@@ -252,7 +282,10 @@ func syncRegionVPCs(ctx context.Context, userCred mcclient.TokenCredential, sync
 }
 
 func syncRegionAccessGroups(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	accessGroups, err := remoteRegion.GetICloudAccessGroups()
+	accessGroups, err := func() ([]cloudprovider.ICloudAccessGroup, error) {
+		defer syncResults.AddRequestCost(AccessGroupManager)()
+		return remoteRegion.GetICloudAccessGroups()
+	}()
 	if err != nil {
 		if errors.Cause(err) == cloudprovider.ErrNotImplemented || errors.Cause(err) == cloudprovider.ErrNotSupported {
 			return
@@ -261,13 +294,19 @@ func syncRegionAccessGroups(ctx context.Context, userCred mcclient.TokenCredenti
 		return
 	}
 
-	result := localRegion.SyncAccessGroups(ctx, userCred, provider, accessGroups)
+	result := func() compare.SyncResult {
+		defer syncResults.AddSqlCost(AccessGroupManager)()
+		return localRegion.SyncAccessGroups(ctx, userCred, provider, accessGroups)
+	}()
 	syncResults.Add(AccessGroupCacheManager, result)
 	log.Infof("Sync Access Group Caches for region %s result: %s", localRegion.Name, result.Result())
 }
 
 func syncRegionFileSystems(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	filesystems, err := remoteRegion.GetICloudFileSystems()
+	filesystems, err := func() ([]cloudprovider.ICloudFileSystem, error) {
+		defer syncResults.AddRequestCost(FileSystemManager)()
+		return remoteRegion.GetICloudFileSystems()
+	}()
 	if err != nil {
 		if errors.Cause(err) == cloudprovider.ErrNotImplemented || errors.Cause(err) == cloudprovider.ErrNotSupported {
 			return
@@ -276,7 +315,10 @@ func syncRegionFileSystems(ctx context.Context, userCred mcclient.TokenCredentia
 		return
 	}
 
-	localFSs, removeFSs, result := localRegion.SyncFileSystems(ctx, userCred, provider, filesystems)
+	localFSs, removeFSs, result := func() ([]SFileSystem, []cloudprovider.ICloudFileSystem, compare.SyncResult) {
+		defer syncResults.AddSqlCost(FileSystemManager)()
+		return localRegion.SyncFileSystems(ctx, userCred, provider, filesystems)
+	}()
 	syncResults.Add(FileSystemManager, result)
 	log.Infof("Sync FileSystem for region %s result: %s", localRegion.Name, result.Result())
 
@@ -309,7 +351,10 @@ func syncFileSystemMountTargets(ctx context.Context, userCred mcclient.TokenCred
 }
 
 func syncVpcPeerConnections(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localVpc *SVpc, remoteVpc cloudprovider.ICloudVpc, syncRange *SSyncRange) {
-	peerConnections, err := remoteVpc.GetICloudVpcPeeringConnections()
+	peerConnections, err := func() ([]cloudprovider.ICloudVpcPeeringConnection, error) {
+		defer syncResults.AddRequestCost(VpcPeeringConnectionManager)()
+		return remoteVpc.GetICloudVpcPeeringConnections()
+	}()
 	if err != nil {
 		if errors.Cause(err) == cloudprovider.ErrNotImplemented || errors.Cause(err) == cloudprovider.ErrNotSupported {
 			return
@@ -318,10 +363,16 @@ func syncVpcPeerConnections(ctx context.Context, userCred mcclient.TokenCredenti
 		return
 	}
 
-	result := localVpc.SyncVpcPeeringConnections(ctx, userCred, peerConnections)
+	result := func() compare.SyncResult {
+		defer syncResults.AddSqlCost(VpcPeeringConnectionManager)()
+		return localVpc.SyncVpcPeeringConnections(ctx, userCred, peerConnections)
+	}()
 	syncResults.Add(VpcPeeringConnectionManager, result)
 
-	accepterPeerings, err := remoteVpc.GetICloudAccepterVpcPeeringConnections()
+	accepterPeerings, err := func() ([]cloudprovider.ICloudVpcPeeringConnection, error) {
+		defer syncResults.AddRequestCost(VpcPeeringConnectionManager)()
+		return remoteVpc.GetICloudAccepterVpcPeeringConnections()
+	}()
 	if err != nil {
 		if errors.Cause(err) == cloudprovider.ErrNotImplemented || errors.Cause(err) == cloudprovider.ErrNotSupported {
 			return
@@ -329,7 +380,10 @@ func syncVpcPeerConnections(ctx context.Context, userCred mcclient.TokenCredenti
 		log.Errorf("GetICloudVpcPeeringConnections for vpc %s failed %v", localVpc.Name, err)
 		return
 	}
-	backSyncResult := localVpc.BackSycVpcPeeringConnectionsVpc(accepterPeerings)
+	backSyncResult := func() compare.SyncResult {
+		defer syncResults.AddRequestCost(VpcPeeringConnectionManager)()
+		return localVpc.BackSycVpcPeeringConnectionsVpc(accepterPeerings)
+	}()
 	syncResults.Add(VpcPeeringConnectionManager, backSyncResult)
 
 	log.Infof("SyncVpcPeeringConnections for vpc %s result: %s", localVpc.Name, result.Result())
@@ -339,14 +393,20 @@ func syncVpcPeerConnections(ctx context.Context, userCred mcclient.TokenCredenti
 }
 
 func syncVpcSecGroup(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localVpc *SVpc, remoteVpc cloudprovider.ICloudVpc, syncRange *SSyncRange) {
-	secgroups, err := remoteVpc.GetISecurityGroups()
+	secgroups, err := func() ([]cloudprovider.ICloudSecurityGroup, error) {
+		defer syncResults.AddRequestCost(SecurityGroupCacheManager)()
+		return remoteVpc.GetISecurityGroups()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetISecurityGroups for vpc %s failed %s", remoteVpc.GetId(), err)
 		log.Errorf(msg)
 		return
 	}
 
-	_, _, result := SecurityGroupCacheManager.SyncSecurityGroupCaches(ctx, userCred, provider, secgroups, localVpc)
+	_, _, result := func() ([]SSecurityGroup, []cloudprovider.ICloudSecurityGroup, compare.SyncResult) {
+		defer syncResults.AddSqlCost(SecurityGroupCacheManager)()
+		return SecurityGroupCacheManager.SyncSecurityGroupCaches(ctx, userCred, provider, secgroups, localVpc)
+	}()
 	syncResults.Add(SecurityGroupCacheManager, result)
 
 	msg := result.Result()
@@ -358,13 +418,19 @@ func syncVpcSecGroup(ctx context.Context, userCred mcclient.TokenCredential, syn
 }
 
 func syncVpcRouteTables(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localVpc *SVpc, remoteVpc cloudprovider.ICloudVpc, syncRange *SSyncRange) {
-	routeTables, err := remoteVpc.GetIRouteTables()
+	routeTables, err := func() ([]cloudprovider.ICloudRouteTable, error) {
+		defer syncResults.AddRequestCost(RouteTableManager)()
+		return remoteVpc.GetIRouteTables()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIRouteTables for vpc %s failed %s", remoteVpc.GetId(), err)
 		log.Errorf(msg)
 		return
 	}
-	localRouteTables, remoteRouteTables, result := RouteTableManager.SyncRouteTables(ctx, userCred, localVpc, routeTables, provider)
+	localRouteTables, remoteRouteTables, result := func() ([]SRouteTable, []cloudprovider.ICloudRouteTable, compare.SyncResult) {
+		defer syncResults.AddSqlCost(RouteTableManager)()
+		return RouteTableManager.SyncRouteTables(ctx, userCred, localVpc, routeTables, provider)
+	}()
 
 	syncResults.Add(RouteTableManager, result)
 
@@ -389,13 +455,19 @@ func syncVpcRouteTables(ctx context.Context, userCred mcclient.TokenCredential, 
 }
 
 func syncVpcNatgateways(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localVpc *SVpc, remoteVpc cloudprovider.ICloudVpc, syncRange *SSyncRange) {
-	natGateways, err := remoteVpc.GetINatGateways()
+	natGateways, err := func() ([]cloudprovider.ICloudNatGateway, error) {
+		defer syncResults.AddRequestCost(NatGatewayManager)()
+		return remoteVpc.GetINatGateways()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetINatGateways for vpc %s failed %s", remoteVpc.GetId(), err)
 		log.Errorf(msg)
 		return
 	}
-	localNatGateways, remoteNatGateways, result := NatGatewayManager.SyncNatGateways(ctx, userCred, provider.GetOwnerId(), provider, localVpc, natGateways)
+	localNatGateways, remoteNatGateways, result := func() ([]SNatGateway, []cloudprovider.ICloudNatGateway, compare.SyncResult) {
+		defer syncResults.AddSqlCost(NatGatewayManager)()
+		return NatGatewayManager.SyncNatGateways(ctx, userCred, provider.GetOwnerId(), provider, localVpc, natGateways)
+	}()
 
 	syncResults.Add(NatGatewayManager, result)
 
@@ -471,13 +543,27 @@ func syncNatSTable(ctx context.Context, userCred mcclient.TokenCredential, provi
 }
 
 func syncVpcWires(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localVpc *SVpc, remoteVpc cloudprovider.ICloudVpc, syncRange *SSyncRange) {
-	wires, err := remoteVpc.GetIWires()
+	wires, err := func() ([]cloudprovider.ICloudWire, error) {
+		defer func() {
+			if syncResults != nil {
+				syncResults.AddRequestCost(WireManager)()
+			}
+		}()
+		return remoteVpc.GetIWires()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIWires for vpc %s failed %s", remoteVpc.GetId(), err)
 		log.Errorf(msg)
 		return
 	}
-	localWires, remoteWires, result := WireManager.SyncWires(ctx, userCred, localVpc, wires, provider)
+	localWires, remoteWires, result := func() ([]SWire, []cloudprovider.ICloudWire, compare.SyncResult) {
+		defer func() {
+			if syncResults != nil {
+				syncResults.AddSqlCost(WireManager)()
+			}
+		}()
+		return WireManager.SyncWires(ctx, userCred, localVpc, wires, provider)
+	}()
 
 	if syncResults != nil {
 		syncResults.Add(WireManager, result)
@@ -505,13 +591,27 @@ func syncVpcWires(ctx context.Context, userCred mcclient.TokenCredential, syncRe
 }
 
 func syncWireNetworks(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localWire *SWire, remoteWire cloudprovider.ICloudWire, syncRange *SSyncRange) {
-	nets, err := remoteWire.GetINetworks()
+	nets, err := func() ([]cloudprovider.ICloudNetwork, error) {
+		defer func() {
+			if syncResults != nil {
+				syncResults.AddRequestCost(NetworkManager)()
+			}
+		}()
+		return remoteWire.GetINetworks()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetINetworks for wire %s failed %s", remoteWire.GetId(), err)
 		log.Errorf(msg)
 		return
 	}
-	_, _, result := NetworkManager.SyncNetworks(ctx, userCred, localWire, nets, provider)
+	_, _, result := func() ([]SNetwork, []cloudprovider.ICloudNetwork, compare.SyncResult) {
+		defer func() {
+			if syncResults != nil {
+				syncResults.AddSqlCost(NetworkManager)()
+			}
+		}()
+		return NetworkManager.SyncNetworks(ctx, userCred, localWire, nets, provider)
+	}()
 
 	if syncResults != nil {
 		syncResults.Add(NetworkManager, result)
@@ -528,13 +628,19 @@ func syncWireNetworks(ctx context.Context, userCred mcclient.TokenCredential, sy
 }
 
 func syncZoneStorages(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, driver cloudprovider.ICloudProvider, localZone *SZone, remoteZone cloudprovider.ICloudZone, syncRange *SSyncRange, storageCachePairs []sStoragecacheSyncPair) []sStoragecacheSyncPair {
-	storages, err := remoteZone.GetIStorages()
+	storages, err := func() ([]cloudprovider.ICloudStorage, error) {
+		defer syncResults.AddRequestCost(StorageManager)()
+		return remoteZone.GetIStorages()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIStorages for zone %s failed %s", remoteZone.GetName(), err)
 		log.Errorf(msg)
 		return nil
 	}
-	localStorages, remoteStorages, result := StorageManager.SyncStorages(ctx, userCred, provider, localZone, storages)
+	localStorages, remoteStorages, result := func() ([]SStorage, []cloudprovider.ICloudStorage, compare.SyncResult) {
+		defer syncResults.AddSqlCost(StorageManager)()
+		return StorageManager.SyncStorages(ctx, userCred, provider, localZone, storages)
+	}()
 
 	syncResults.Add(StorageManager, result)
 
@@ -597,13 +703,19 @@ func syncStorageCaches(ctx context.Context, userCred mcclient.TokenCredential, p
 }
 
 func syncStorageDisks(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, driver cloudprovider.ICloudProvider, localStorage *SStorage, remoteStorage cloudprovider.ICloudStorage, syncRange *SSyncRange) {
-	disks, err := remoteStorage.GetIDisks()
+	disks, err := func() ([]cloudprovider.ICloudDisk, error) {
+		defer syncResults.AddRequestCost(DiskManager)()
+		return remoteStorage.GetIDisks()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIDisks for storage %s failed %s", remoteStorage.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
-	_, _, result := DiskManager.SyncDisks(ctx, userCred, driver, localStorage, disks, provider.GetOwnerId())
+	_, _, result := func() ([]SDisk, []cloudprovider.ICloudDisk, compare.SyncResult) {
+		defer syncResults.AddSqlCost(DiskManager)()
+		return DiskManager.SyncDisks(ctx, userCred, driver, localStorage, disks, provider.GetOwnerId())
+	}()
 
 	syncResults.Add(DiskManager, result)
 
@@ -618,13 +730,19 @@ func syncStorageDisks(ctx context.Context, userCred mcclient.TokenCredential, sy
 }
 
 func syncZoneHosts(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, driver cloudprovider.ICloudProvider, localZone *SZone, remoteZone cloudprovider.ICloudZone, syncRange *SSyncRange, storageCachePairs []sStoragecacheSyncPair) []sStoragecacheSyncPair {
-	hosts, err := remoteZone.GetIHosts()
+	hosts, err := func() ([]cloudprovider.ICloudHost, error) {
+		defer syncResults.AddRequestCost(HostManager)()
+		return remoteZone.GetIHosts()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIHosts for zone %s failed %s", remoteZone.GetName(), err)
 		log.Errorf(msg)
 		return nil
 	}
-	localHosts, remoteHosts, result := HostManager.SyncHosts(ctx, userCred, provider, localZone, hosts)
+	localHosts, remoteHosts, result := func() ([]SHost, []cloudprovider.ICloudHost, compare.SyncResult) {
+		defer syncResults.AddSqlCost(HostManager)()
+		return HostManager.SyncHosts(ctx, userCred, provider, localZone, hosts)
+	}()
 
 	syncResults.Add(HostManager, result)
 
@@ -659,15 +777,21 @@ func syncZoneHosts(ctx context.Context, userCred mcclient.TokenCredential, syncR
 }
 
 func syncHostStorages(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localHost *SHost, remoteHost cloudprovider.ICloudHost, storageCachePairs []sStoragecacheSyncPair) []sStoragecacheSyncPair {
-	storages, err := remoteHost.GetIStorages()
+	storages, err := func() ([]cloudprovider.ICloudStorage, error) {
+		defer syncResults.AddRequestCost(HoststorageManager)()
+		return remoteHost.GetIStorages()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIStorages for host %s failed %s", remoteHost.GetName(), err)
 		log.Errorf(msg)
 		return nil
 	}
-	localStorages, remoteStorages, result := localHost.SyncHostStorages(ctx, userCred, storages, provider)
+	localStorages, remoteStorages, result := func() ([]SStorage, []cloudprovider.ICloudStorage, compare.SyncResult) {
+		defer syncResults.AddSqlCost(HoststorageManager)()
+		return localHost.SyncHostStorages(ctx, userCred, storages, provider)
+	}()
 
-	syncResults.Add(StorageManager, result)
+	syncResults.Add(HoststorageManager, result)
 
 	msg := result.Result()
 	notes := fmt.Sprintf("SyncHostStorages for host %s result: %s", localHost.Name, msg)
@@ -692,16 +816,30 @@ func syncHostStorages(ctx context.Context, userCred mcclient.TokenCredential, sy
 }
 
 func syncHostWires(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localHost *SHost, remoteHost cloudprovider.ICloudHost) {
-	wires, err := remoteHost.GetIWires()
+	wires, err := func() ([]cloudprovider.ICloudWire, error) {
+		defer func() {
+			if syncResults != nil {
+				syncResults.AddRequestCost(HostwireManager)()
+			}
+		}()
+		return remoteHost.GetIWires()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIWires for host %s failed %s", remoteHost.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
-	result := localHost.SyncHostWires(ctx, userCred, wires)
+	result := func() compare.SyncResult {
+		defer func() {
+			if syncResults != nil {
+				syncResults.AddSqlCost(HostwireManager)()
+			}
+		}()
+		return localHost.SyncHostWires(ctx, userCred, wires)
+	}()
 
 	if syncResults != nil {
-		syncResults.Add(WireManager, result)
+		syncResults.Add(HostwireManager, result)
 	}
 
 	msg := result.Result()
@@ -715,46 +853,47 @@ func syncHostWires(ctx context.Context, userCred mcclient.TokenCredential, syncR
 }
 
 func syncHostVMs(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, driver cloudprovider.ICloudProvider, localHost *SHost, remoteHost cloudprovider.ICloudHost, syncRange *SSyncRange) {
-	vms, err := remoteHost.GetIVMs()
+	vms, err := func() ([]cloudprovider.ICloudVM, error) {
+		defer syncResults.AddRequestCost(GuestManager)()
+		return remoteHost.GetIVMs()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIVMs for host %s failed %s", remoteHost.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
-	syncVMPairs, result := localHost.SyncHostVMs(ctx, userCred, driver, vms, provider.GetOwnerId())
 
-	syncResults.Add(GuestManager, result)
+	func() {
+		defer syncResults.AddSqlCost(GuestManager)()
 
-	msg := result.Result()
-	notes := fmt.Sprintf("SyncHostVMs for host %s result: %s", localHost.Name, msg)
-	log.Infof(notes)
-	if result.IsError() {
-		return
-	}
+		syncVMPairs, result := localHost.SyncHostVMs(ctx, userCred, driver, vms, provider.GetOwnerId())
+		syncResults.Add(GuestManager, result)
 
-	// db.OpsLog.LogEvent(provider, db.ACT_SYNC_HOST_COMPLETE, msg, userCred)
-	// logclient.AddActionLog(provider, getAction(task.Params), notes, task.UserCred, true)
-	for i := 0; i < len(syncVMPairs); i += 1 {
-		if !syncVMPairs[i].IsNew && !syncRange.DeepSync {
-			continue
+		msg := result.Result()
+		notes := fmt.Sprintf("SyncHostVMs for host %s result: %s", localHost.Name, msg)
+		log.Infof(notes)
+		if result.IsError() {
+			return
 		}
-		func() {
-			lockman.LockObject(ctx, syncVMPairs[i].Local)
-			defer lockman.ReleaseObject(ctx, syncVMPairs[i].Local)
 
-			if syncVMPairs[i].Local.Deleted || syncVMPairs[i].Local.PendingDeleted {
-				return
+		// db.OpsLog.LogEvent(provider, db.ACT_SYNC_HOST_COMPLETE, msg, userCred)
+		// logclient.AddActionLog(provider, getAction(task.Params), notes, task.UserCred, true)
+		for i := 0; i < len(syncVMPairs); i += 1 {
+			if !syncVMPairs[i].IsNew && !syncRange.DeepSync {
+				continue
 			}
+			func() {
+				lockman.LockObject(ctx, syncVMPairs[i].Local)
+				defer lockman.ReleaseObject(ctx, syncVMPairs[i].Local)
 
-			syncVMPeripherals(ctx, userCred, syncVMPairs[i].Local, syncVMPairs[i].Remote, localHost, provider, driver)
-			// syncMetadata(ctx, userCred, syncVMPairs[i].Local, syncVMPairs[i].Remote)
-			// syncVMNics(ctx, userCred, provider, localHost, syncVMPairs[i].Local, syncVMPairs[i].Remote)
-			// syncVMDisks(ctx, userCred, provider, driver, localHost, syncVMPairs[i].Local, syncVMPairs[i].Remote, syncRange)
-			// syncVMEip(ctx, userCred, provider, syncVMPairs[i].Local, syncVMPairs[i].Remote)
-			// syncVMSecgroups(ctx, userCred, provider, syncVMPairs[i].Local, syncVMPairs[i].Remote)
+				if syncVMPairs[i].Local.Deleted || syncVMPairs[i].Local.PendingDeleted {
+					return
+				}
 
-		}()
-	}
+				syncVMPeripherals(ctx, userCred, syncVMPairs[i].Local, syncVMPairs[i].Remote, localHost, provider, driver)
+			}()
+		}
+	}()
 }
 
 func syncVMPeripherals(ctx context.Context, userCred mcclient.TokenCredential, local *SGuest, remote cloudprovider.ICloudVM, host *SHost, provider *SCloudprovider, driver cloudprovider.ICloudProvider) {
@@ -869,35 +1008,41 @@ func syncSkusFromPrivateCloud(ctx context.Context, userCred mcclient.TokenCreden
 }
 
 func syncRegionDBInstances(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	instances, err := remoteRegion.GetIDBInstances()
+	instances, err := func() ([]cloudprovider.ICloudDBInstance, error) {
+		defer syncResults.AddRequestCost(DBInstanceManager)()
+		return remoteRegion.GetIDBInstances()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetIDBInstances for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
-	localInstances, remoteInstances, result := DBInstanceManager.SyncDBInstances(ctx, userCred, provider.GetOwnerId(), provider, localRegion, instances)
+	func() {
+		defer syncResults.AddSqlCost(DBInstanceManager)()
+		localInstances, remoteInstances, result := DBInstanceManager.SyncDBInstances(ctx, userCred, provider.GetOwnerId(), provider, localRegion, instances)
 
-	syncResults.Add(DBInstanceManager, result)
-	DBInstanceManager.SyncDBInstanceMasterId(ctx, userCred, provider, instances)
+		syncResults.Add(DBInstanceManager, result)
+		DBInstanceManager.SyncDBInstanceMasterId(ctx, userCred, provider, instances)
 
-	msg := result.Result()
-	log.Infof("SyncDBInstances for region %s result: %s", localRegion.Name, msg)
-	if result.IsError() {
-		return
-	}
-	db.OpsLog.LogEvent(provider, db.ACT_SYNC_HOST_COMPLETE, msg, userCred)
-	for i := 0; i < len(localInstances); i++ {
-		func() {
-			lockman.LockObject(ctx, &localInstances[i])
-			defer lockman.ReleaseObject(ctx, &localInstances[i])
+		msg := result.Result()
+		log.Infof("SyncDBInstances for region %s result: %s", localRegion.Name, msg)
+		if result.IsError() {
+			return
+		}
+		db.OpsLog.LogEvent(provider, db.ACT_SYNC_HOST_COMPLETE, msg, userCred)
+		for i := 0; i < len(localInstances); i++ {
+			func() {
+				lockman.LockObject(ctx, &localInstances[i])
+				defer lockman.ReleaseObject(ctx, &localInstances[i])
 
-			if localInstances[i].Deleted || localInstances[i].PendingDeleted {
-				return
-			}
+				if localInstances[i].Deleted || localInstances[i].PendingDeleted {
+					return
+				}
 
-			syncDBInstanceResource(ctx, userCred, syncResults, &localInstances[i], remoteInstances[i])
-		}()
-	}
+				syncDBInstanceResource(ctx, userCred, syncResults, &localInstances[i], remoteInstances[i])
+			}()
+		}
+	}()
 }
 
 func syncDBInstanceResource(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, localInstance *SDBInstance, remoteInstance cloudprovider.ICloudDBInstance) {
@@ -998,21 +1143,26 @@ func syncDBInstanceParameters(ctx context.Context, userCred mcclient.TokenCreden
 }
 
 func syncRegionDBInstanceBackups(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) error {
-	backups, err := remoteRegion.GetIDBInstanceBackups()
+	backups, err := func() ([]cloudprovider.ICloudDBInstanceBackup, error) {
+		defer syncResults.AddRequestCost(DBInstanceBackupManager)()
+		return remoteRegion.GetIDBInstanceBackups()
+	}()
 	if err != nil {
 		return errors.Wrapf(err, "GetIDBInstanceBackups")
 	}
 
-	result := DBInstanceBackupManager.SyncDBInstanceBackups(ctx, userCred, provider, nil, localRegion, backups)
-	syncResults.Add(DBInstanceBackupManager, result)
+	return func() error {
+		defer syncResults.AddSqlCost(DBInstanceBackupManager)()
+		result := DBInstanceBackupManager.SyncDBInstanceBackups(ctx, userCred, provider, nil, localRegion, backups)
+		syncResults.Add(DBInstanceBackupManager, result)
 
-	msg := result.Result()
-	log.Infof("SyncDBInstanceBackups for region %s result: %s", localRegion.Name, msg)
-	if result.IsError() {
-		return result.AllError()
-	}
-	return nil
-
+		msg := result.Result()
+		log.Infof("SyncDBInstanceBackups for region %s result: %s", localRegion.Name, msg)
+		if result.IsError() {
+			return result.AllError()
+		}
+		return nil
+	}()
 }
 
 func syncDBInstanceDatabases(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, localInstance *SDBInstance, remoteInstance cloudprovider.ICloudDBInstance) error {
@@ -1188,14 +1338,20 @@ func syncWafRules(ctx context.Context, userCred mcclient.TokenCredential, syncRe
 }
 
 func syncRegionSnapshots(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	snapshots, err := remoteRegion.GetISnapshots()
+	snapshots, err := func() ([]cloudprovider.ICloudSnapshot, error) {
+		defer syncResults.AddRequestCost(SnapshotManager)()
+		return remoteRegion.GetISnapshots()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetISnapshots for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
 
-	result := SnapshotManager.SyncSnapshots(ctx, userCred, provider, localRegion, snapshots, provider.GetOwnerId())
+	result := func() compare.SyncResult {
+		defer syncResults.AddSqlCost(SnapshotManager)()
+		return SnapshotManager.SyncSnapshots(ctx, userCred, provider, localRegion, snapshots, provider.GetOwnerId())
+	}()
 
 	syncResults.Add(SnapshotManager, result)
 
@@ -1208,14 +1364,20 @@ func syncRegionSnapshots(ctx context.Context, userCred mcclient.TokenCredential,
 }
 
 func syncRegionSnapshotPolicies(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	snapshotPolicies, err := remoteRegion.GetISnapshotPolicies()
+	snapshotPolicies, err := func() ([]cloudprovider.ICloudSnapshotPolicy, error) {
+		defer syncResults.AddRequestCost(SnapshotPolicyManager)()
+		return remoteRegion.GetISnapshotPolicies()
+	}()
 	if err != nil {
 		log.Errorf("GetISnapshotPolicies for region %s failed %s", remoteRegion.GetName(), err)
 		return
 	}
 
-	result := SnapshotPolicyManager.SyncSnapshotPolicies(
-		ctx, userCred, provider, localRegion, snapshotPolicies, provider.GetOwnerId())
+	result := func() compare.SyncResult {
+		defer syncResults.AddSqlCost(SnapshotPolicyManager)()
+		return SnapshotPolicyManager.SyncSnapshotPolicies(
+			ctx, userCred, provider, localRegion, snapshotPolicies, provider.GetOwnerId())
+	}()
 	syncResults.Add(SnapshotPolicyManager, result)
 	msg := result.Result()
 	log.Infof("SyncSnapshotPolicies for region %s result: %s", localRegion.Name, msg)
@@ -1225,34 +1387,41 @@ func syncRegionSnapshotPolicies(ctx context.Context, userCred mcclient.TokenCred
 }
 
 func syncRegionNetworkInterfaces(ctx context.Context, userCred mcclient.TokenCredential, syncResults SSyncResultSet, provider *SCloudprovider, localRegion *SCloudregion, remoteRegion cloudprovider.ICloudRegion, syncRange *SSyncRange) {
-	networkInterfaces, err := remoteRegion.GetINetworkInterfaces()
+	networkInterfaces, err := func() ([]cloudprovider.ICloudNetworkInterface, error) {
+		defer syncResults.AddRequestCost(NetworkInterfaceManager)()
+		return remoteRegion.GetINetworkInterfaces()
+	}()
 	if err != nil {
 		msg := fmt.Sprintf("GetINetworkInterfaces for region %s failed %s", remoteRegion.GetName(), err)
 		log.Errorf(msg)
 		return
 	}
-	localInterfaces, remoteInterfaces, result := NetworkInterfaceManager.SyncNetworkInterfaces(ctx, userCred, provider, localRegion, networkInterfaces)
 
-	syncResults.Add(NetworkInterfaceManager, result)
+	func() {
+		defer syncResults.AddSqlCost(NetworkInterfaceManager)()
+		localInterfaces, remoteInterfaces, result := NetworkInterfaceManager.SyncNetworkInterfaces(ctx, userCred, provider, localRegion, networkInterfaces)
 
-	msg := result.Result()
-	log.Infof("SyncNetworkInterfaces for region %s result: %s", localRegion.Name, msg)
-	if result.IsError() {
-		return
-	}
+		syncResults.Add(NetworkInterfaceManager, result)
 
-	for i := 0; i < len(localInterfaces); i++ {
-		func() {
-			lockman.LockObject(ctx, &localInterfaces[i])
-			defer lockman.ReleaseObject(ctx, &localInterfaces[i])
+		msg := result.Result()
+		log.Infof("SyncNetworkInterfaces for region %s result: %s", localRegion.Name, msg)
+		if result.IsError() {
+			return
+		}
 
-			if localInterfaces[i].Deleted {
-				return
-			}
+		for i := 0; i < len(localInterfaces); i++ {
+			func() {
+				lockman.LockObject(ctx, &localInterfaces[i])
+				defer lockman.ReleaseObject(ctx, &localInterfaces[i])
 
-			syncInterfaceAddresses(ctx, userCred, &localInterfaces[i], remoteInterfaces[i])
-		}()
-	}
+				if localInterfaces[i].Deleted {
+					return
+				}
+
+				syncInterfaceAddresses(ctx, userCred, &localInterfaces[i], remoteInterfaces[i])
+			}()
+		}
+	}()
 }
 
 func syncInterfaceAddresses(ctx context.Context, userCred mcclient.TokenCredential, localInterface *SNetworkInterface, remoteInterface cloudprovider.ICloudNetworkInterface) {
@@ -1377,12 +1546,16 @@ func syncPublicCloudProviderInfo(
 		for i := range storageCachePairs {
 			// always sync private cloud cached images
 			if storageCachePairs[i].isNew || syncRange.DeepSync || !driver.GetFactory().IsPublicCloud() {
-				result := storageCachePairs[i].syncCloudImages(ctx, userCred)
+				func() {
+					syncResults.AddRequestCost(CachedimageManager)()
+					result := storageCachePairs[i].syncCloudImages(ctx, userCred)
 
-				syncResults.Add(StoragecachedimageManager, result)
+					syncResults.Add(CachedimageManager, result)
 
-				msg := result.Result()
-				log.Infof("syncCloudImages result: %s", msg)
+					msg := result.Result()
+					log.Infof("syncCloudImages result: %s", msg)
+
+				}()
 			}
 		}
 	}
@@ -1415,14 +1588,20 @@ func syncOnPremiseCloudProviderInfo(
 
 	storageCachePairs := make([]sStoragecacheSyncPair, 0)
 	if cloudprovider.IsSupportCompute(driver) {
-		ihosts, err := iregion.GetIHosts()
+		ihosts, err := func() ([]cloudprovider.ICloudHost, error) {
+			defer syncResults.AddRequestCost(HostManager)()
+			return iregion.GetIHosts()
+		}()
 		if err != nil {
 			msg := fmt.Sprintf("GetIHosts for provider %s failed %s", provider.GetName(), err)
 			log.Errorf(msg)
 			return err
 		}
 
-		localHosts, remoteHosts, result := HostManager.SyncHosts(ctx, userCred, provider, nil, ihosts)
+		localHosts, remoteHosts, result := func() ([]SHost, []cloudprovider.ICloudHost, compare.SyncResult) {
+			defer syncResults.AddSqlCost(HostManager)()
+			return HostManager.SyncHosts(ctx, userCred, provider, nil, ihosts)
+		}()
 
 		syncResults.Add(HostManager, result)
 
@@ -1449,10 +1628,13 @@ func syncOnPremiseCloudProviderInfo(
 		for i := range storageCachePairs {
 			// alway sync on-premise cached images
 			// if storageCachePairs[i].isNew || syncRange.DeepSync {
-			result := storageCachePairs[i].syncCloudImages(ctx, userCred)
-			syncResults.Add(StoragecachedimageManager, result)
-			msg := result.Result()
-			log.Infof("syncCloudImages for stroagecache %s result: %s", storageCachePairs[i].local.GetId(), msg)
+			func() {
+				defer syncResults.AddRequestCost(CachedimageManager)()
+				result := storageCachePairs[i].syncCloudImages(ctx, userCred)
+				syncResults.Add(CachedimageManager, result)
+				msg := result.Result()
+				log.Infof("syncCloudImages for stroagecache %s result: %s", storageCachePairs[i].local.GetId(), msg)
+			}()
 			// }
 		}
 	}
@@ -1465,20 +1647,27 @@ func syncOnPremiseHostWires(ctx context.Context, userCred mcclient.TokenCredenti
 	if provider.Provider != api.CLOUD_PROVIDER_VMWARE {
 		return
 	}
-	result := localHost.SyncEsxiHostWires(ctx, userCred, remoteHost)
-	if syncResults != nil {
-		syncResults.Add(HostManager, result)
-	}
+	func() {
+		defer func() {
+			if syncResults != nil {
+				syncResults.AddSqlCost(HostwireManager)()
+			}
+		}()
+		result := localHost.SyncEsxiHostWires(ctx, userCred, remoteHost)
+		if syncResults != nil {
+			syncResults.Add(HostwireManager, result)
+		}
 
-	msg := result.Result()
-	notes := fmt.Sprintf("SyncEsxiHostWires for host %s result: %s", localHost.Name, msg)
-	if result.IsError() {
-		log.Errorf(notes)
-		return
-	} else {
-		log.Infof(notes)
-	}
-	db.OpsLog.LogEvent(provider, db.ACT_SYNC_HOST_COMPLETE, msg, userCred)
+		msg := result.Result()
+		notes := fmt.Sprintf("SyncEsxiHostWires for host %s result: %s", localHost.Name, msg)
+		if result.IsError() {
+			log.Errorf(notes)
+			return
+		} else {
+			log.Infof(notes)
+		}
+		db.OpsLog.LogEvent(provider, db.ACT_SYNC_HOST_COMPLETE, msg, userCred)
+	}()
 }
 
 func syncHostNics(ctx context.Context, userCred mcclient.TokenCredential, provider *SCloudprovider, localHost *SHost, remoteHost cloudprovider.ICloudHost) {
