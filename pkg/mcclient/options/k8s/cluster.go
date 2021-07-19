@@ -663,16 +663,32 @@ type ClusterComponentMinioSetting struct {
 	Storage       ClusterComponentStorage `help:"Storage setting" json:"storage"`
 }
 
-type ClusterEnableComponentMinioOpt struct {
+type ClusterEnableComponentMinioBaseOpt struct {
 	ClusterComponentOptions
 	ClusterComponentMinioSetting
 }
 
-func (o ClusterEnableComponentMinioOpt) Params() (jsonutils.JSONObject, error) {
-	params := o.ClusterComponentOptions.Params("minio")
+func (o ClusterEnableComponentMinioBaseOpt) Params(typ string) (jsonutils.JSONObject, error) {
+	params := o.ClusterComponentOptions.Params(typ)
 	setting := jsonutils.Marshal(o.ClusterComponentMinioSetting)
-	params.Add(setting, "minio")
+	params.Add(setting, typ)
 	return params, nil
+}
+
+type ClusterEnableComponentMinioOpt struct {
+	ClusterEnableComponentMinioBaseOpt
+}
+
+func (o ClusterEnableComponentMinioOpt) Params() (jsonutils.JSONObject, error) {
+	return o.ClusterEnableComponentMinioBaseOpt.Params("minio")
+}
+
+type ClusterEnableComponentMonitorMinioOpt struct {
+	ClusterEnableComponentMinioBaseOpt
+}
+
+func (o ClusterEnableComponentMonitorMinioOpt) Params() (jsonutils.JSONObject, error) {
+	return o.ClusterEnableComponentMinioBaseOpt.Params("monitorMinio")
 }
 
 type ComponentThanosDnsDiscovery struct {
