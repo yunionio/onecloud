@@ -36,6 +36,10 @@ type ModelSetsMaxUpdatedAt struct {
 	DnsRecords time.Time
 
 	RouteTables time.Time
+
+	LoadbalancerNetworks  time.Time
+	LoadbalancerListeners time.Time
+	LoadbalancerAcls      time.Time
 }
 
 func NewModelSetsMaxUpdatedAt() *ModelSetsMaxUpdatedAt {
@@ -55,6 +59,10 @@ func NewModelSetsMaxUpdatedAt() *ModelSetsMaxUpdatedAt {
 		DnsRecords: apihelper.PseudoZeroTime,
 
 		RouteTables: apihelper.PseudoZeroTime,
+
+		LoadbalancerNetworks:  apihelper.PseudoZeroTime,
+		LoadbalancerListeners: apihelper.PseudoZeroTime,
+		LoadbalancerAcls:      apihelper.PseudoZeroTime,
 	}
 }
 
@@ -74,6 +82,10 @@ type ModelSets struct {
 	DnsRecords DnsRecords
 
 	RouteTables RouteTables
+
+	LoadbalancerNetworks  LoadbalancerNetworks
+	LoadbalancerListeners LoadbalancerListeners
+	LoadbalancerAcls      LoadbalancerAcls
 }
 
 func NewModelSets() *ModelSets {
@@ -93,6 +105,10 @@ func NewModelSets() *ModelSets {
 		DnsRecords: DnsRecords{},
 
 		RouteTables: RouteTables{},
+
+		LoadbalancerNetworks:  LoadbalancerNetworks{},
+		LoadbalancerListeners: LoadbalancerListeners{},
+		LoadbalancerAcls:      LoadbalancerAcls{},
 	}
 }
 
@@ -114,6 +130,10 @@ func (mss *ModelSets) ModelSetList() []apihelper.IModelSet {
 		mss.DnsRecords,
 
 		mss.RouteTables,
+
+		mss.LoadbalancerNetworks,
+		mss.LoadbalancerListeners,
+		mss.LoadbalancerAcls,
 	}
 }
 
@@ -138,6 +158,10 @@ func (mss *ModelSets) copy_() *ModelSets {
 		DnsRecords: mss.DnsRecords.Copy().(DnsRecords),
 
 		RouteTables: mss.RouteTables.Copy().(RouteTables),
+
+		LoadbalancerNetworks:  mss.LoadbalancerNetworks.Copy().(LoadbalancerNetworks),
+		LoadbalancerListeners: mss.LoadbalancerListeners.Copy().(LoadbalancerListeners),
+		LoadbalancerAcls:      mss.LoadbalancerAcls.Copy().(LoadbalancerAcls),
 	}
 	return mssCopy
 }
@@ -181,6 +205,7 @@ func (mss *ModelSets) join() bool {
 	p = append(p, mss.Vpcs.joinNetworks(mss.Networks))
 	p = append(p, mss.Networks.joinGuestnetworks(mss.Guestnetworks))
 	p = append(p, mss.Networks.joinNetworkAddresses(mss.NetworkAddresses))
+	p = append(p, mss.Networks.joinLoadbalancerNetworks(mss.LoadbalancerNetworks))
 	p = append(p, mss.Networks.joinElasticips(mss.Elasticips))
 	p = append(p, mss.Guests.joinHosts(mss.Hosts))
 	p = append(p, mss.Guests.joinSecurityGroups(mss.SecurityGroups))
@@ -189,6 +214,9 @@ func (mss *ModelSets) join() bool {
 	p = append(p, mss.Guestnetworks.joinGuests(mss.Guests))
 	p = append(p, mss.Guestnetworks.joinElasticips(mss.Elasticips))
 	p = append(p, mss.Guestnetworks.joinNetworkAddresses(mss.NetworkAddresses))
+	p = append(p, mss.LoadbalancerNetworks.joinElasticips(mss.Elasticips))
+	p = append(p, mss.LoadbalancerNetworks.joinLoadbalancerListeners(mss.LoadbalancerListeners))
+	p = append(p, mss.LoadbalancerListeners.joinLoadbalancerAcls(mss.LoadbalancerAcls))
 	for _, b := range p {
 		if !b {
 			return false

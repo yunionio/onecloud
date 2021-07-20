@@ -39,7 +39,7 @@ import (
 	"yunion.io/x/onecloud/pkg/mcclient"
 	"yunion.io/x/onecloud/pkg/util/choices"
 	"yunion.io/x/onecloud/pkg/util/httputils"
-	"yunion.io/x/onecloud/pkg/util/rand"
+	randutil "yunion.io/x/onecloud/pkg/util/rand"
 )
 
 type SKVMRegionDriver struct {
@@ -74,28 +74,71 @@ func (self *SKVMRegionDriver) IsSupportPeerSecgroup() bool {
 
 func (self *SKVMRegionDriver) ValidateCreateLoadbalancerData(ctx context.Context, userCred mcclient.TokenCredential, ownerId mcclient.IIdentityProvider, data *jsonutils.JSONDict) (*jsonutils.JSONDict, error) {
 	networkV := validators.NewModelIdOrNameValidator("network", "network", ownerId)
+	networkV.Optional(true)
+	if err := networkV.Validate(data); err != nil {
+		return nil, err
+	}
+
+	var network *models.SNetwork
+	if networkV.Model != nil {
+		network = networkV.Model.(*models.SNetwork)
+	} else {
+		vpcV := validators.NewModelIdOrNameValidator("vpc", "vpc", ownerId)
+		if err := vpcV.Validate(data); err != nil {
+			return nil, err
+		}
+		// find available networks
+		vpc := vpcV.Model.(*models.SVpc)
+		networks, err := vpc.GetNetworks()
+		if err != nil {
+			return nil, httperrors.NewGeneralError(err)
+		}
+		networksLen := len(networks)
+		if networksLen > 0 {
+			i := randutil.Intn(networksLen)
+			j := (i + 1) % networksLen
+			for {
+				net := &networks[j]
+				addrCount, err := net.GetFreeAddressCount()
+				if err != nil {
+					continue
+				}
+				if addrCount > 0 {
+					network = net
+					break
+				}
+
+				j = (j + 1) % networksLen
+				if j == i {
+					break
+				}
+			}
+		}
+		if network == nil {
+			return nil, httperrors.NewBadRequestError("no usable network in vpc %s(%s)", vpc.Name, vpc.Id)
+		}
+	}
+	if network.ServerType != api.NETWORK_TYPE_GUEST {
+		return nil, httperrors.NewBadRequestError("only network type %q is allowed", api.NETWORK_TYPE_GUEST)
+	}
+
 	addressV := validators.NewIPv4AddrValidator("address")
 	clusterV := validators.NewModelIdOrNameValidator("cluster", "loadbalancercluster", ownerId)
 	keyV := map[string]validators.IValidator{
 		"status":  validators.NewStringChoicesValidator("status", api.LB_STATUS_SPEC).Default(api.LB_STATUS_ENABLED),
 		"address": addressV.Optional(true),
-		"network": networkV,
 		"cluster": clusterV.Optional(true),
 	}
 	if err := RunValidators(keyV, data, false); err != nil {
 		return nil, err
 	}
 
-	network := networkV.Model.(*models.SNetwork)
 	region, zone, vpc, _, err := network.ValidateElbNetwork(addressV.IP)
 	if err != nil {
 		return nil, err
 	}
 	if zone == nil {
 		return nil, httperrors.NewInputParameterError("zone info missing")
-	}
-	if vpc.Id != api.DEFAULT_VPC_ID {
-		return nil, httperrors.NewInputParameterError("vpc lb is not allowed for now")
 	}
 
 	if clusterV.Model == nil {
@@ -125,7 +168,7 @@ func (self *SKVMRegionDriver) ValidateCreateLoadbalancerData(ctx context.Context
 		} else {
 			return nil, httperrors.NewInputParameterError("no viable lbcluster")
 		}
-		i := rand.Intn(len(choices))
+		i := randutil.Intn(len(choices))
 		data.Set("cluster_id", jsonutils.NewString(choices[i].Id))
 	} else {
 		cluster := clusterV.Model.(*models.SLoadbalancerCluster)
@@ -139,10 +182,16 @@ func (self *SKVMRegionDriver) ValidateCreateLoadbalancerData(ctx context.Context
 		}
 	}
 
+	lbNetworkType := api.LB_NETWORK_TYPE_VPC
+	if vpc.Id == api.DEFAULT_VPC_ID {
+		lbNetworkType = api.LB_NETWORK_TYPE_CLASSIC
+	}
+
 	data.Set("cloudregion_id", jsonutils.NewString(region.GetId()))
 	data.Set("zone_id", jsonutils.NewString(zone.GetId()))
 	data.Set("vpc_id", jsonutils.NewString(vpc.GetId()))
-	data.Set("network_type", jsonutils.NewString(api.LB_NETWORK_TYPE_CLASSIC))
+	data.Set("network_id", jsonutils.NewString(network.Id))
+	data.Set("network_type", jsonutils.NewString(lbNetworkType))
 	data.Set("address_type", jsonutils.NewString(api.LB_ADDR_TYPE_INTRANET))
 	return data, nil
 }
@@ -224,7 +273,7 @@ func (self *SKVMRegionDriver) ValidateCreateLoadbalancerBackendData(ctx context.
 
 	name, _ := data.GetString("name")
 	if name == "" {
-		name = fmt.Sprintf("%s-%s-%s-%s", backendGroup.Name, backendType, basename, rand.String(4))
+		name = fmt.Sprintf("%s-%s-%s-%s", backendGroup.Name, backendType, basename, randutil.String(4))
 	}
 
 	switch backendType {
@@ -695,22 +744,19 @@ func (self *SKVMRegionDriver) ValidateUpdateLoadbalancerListenerData(ctx context
 func (self *SKVMRegionDriver) RequestCreateLoadbalancer(ctx context.Context, userCred mcclient.TokenCredential, lb *models.SLoadbalancer, task taskman.ITask) error {
 	taskman.LocalTaskRun(task, func() (jsonutils.JSONObject, error) {
 		_, err := db.Update(lb, func() error {
-			if lb.AddressType == api.LB_ADDR_TYPE_INTRANET {
-				// TODO support use reserved ip address
-				// TODO prefer ip address from server_type loadbalancer?
-				req := &models.SLoadbalancerNetworkRequestData{
-					Loadbalancer: lb,
-					NetworkId:    lb.NetworkId,
-					Address:      lb.Address,
-				}
-				// NOTE the small window when agents can see the ephemeral address
-				ln, err := models.LoadbalancernetworkManager.NewLoadbalancerNetwork(ctx, userCred, req)
-				if err != nil {
-					log.Errorf("allocating loadbalancer network failed: %v, req: %#v", err, req)
-					lb.Address = ""
-				} else {
-					lb.Address = ln.IpAddr
-				}
+			// TODO support use reserved ip address
+			req := &models.SLoadbalancerNetworkRequestData{
+				Loadbalancer: lb,
+				NetworkId:    lb.NetworkId,
+				Address:      lb.Address,
+			}
+			// NOTE the small window when agents can see the ephemeral address
+			ln, err := models.LoadbalancernetworkManager.NewLoadbalancerNetwork(ctx, userCred, req)
+			if err != nil {
+				log.Errorf("allocating loadbalancer network failed: %v, req: %#v", err, req)
+				lb.Address = ""
+			} else {
+				lb.Address = ln.IpAddr
 			}
 			return nil
 		})
@@ -1077,7 +1123,7 @@ func (self *SKVMRegionDriver) RequestCreateInstanceSnapshot(ctx context.Context,
 		defer lockman.ReleaseClass(ctx, models.SnapshotManager, "name")
 
 		snapshotName, err := db.GenerateName(ctx, models.SnapshotManager, task.GetUserCred(),
-			fmt.Sprintf("%s-%s", isp.Name, rand.String(8)))
+			fmt.Sprintf("%s-%s", isp.Name, randutil.String(8)))
 		if err != nil {
 			return nil, errors.Wrap(err, "Generate snapshot name")
 		}
@@ -1394,59 +1440,92 @@ func (self *SKVMRegionDriver) GetMaxElasticcacheSecurityGroupCount() int {
 	return 0
 }
 
-func (self *SKVMRegionDriver) RequestAssociatEip(ctx context.Context, userCred mcclient.TokenCredential, eip *models.SElasticip, input api.ElasticipAssociateInput, obj db.IStatusStandaloneModel, task taskman.ITask) error {
+func (self *SKVMRegionDriver) RequestAssociateEip(ctx context.Context, userCred mcclient.TokenCredential, eip *models.SElasticip, input api.ElasticipAssociateInput, obj db.IStatusStandaloneModel, task taskman.ITask) error {
 	taskman.LocalTaskRun(task, func() (jsonutils.JSONObject, error) {
-		if input.InstanceType != api.EIP_ASSOCIATE_TYPE_SERVER {
-			return nil, errors.Wrapf(cloudprovider.ErrNotSupported, "instance type %s", input.InstanceType)
+		switch input.InstanceType {
+		case api.EIP_ASSOCIATE_TYPE_SERVER:
+			return self.requestAssociateEipWithServer(ctx, userCred, eip, input, obj, task)
+		case api.EIP_ASSOCIATE_TYPE_LOADBALANCER:
+			return self.requestAssociateEipWithLoadbalancer(ctx, userCred, eip, input, obj, task)
+		default:
+			return nil, errors.Wrapf(cloudprovider.ErrNotSupported, "unsupported instance type %q", input.InstanceType)
 		}
-
-		guest := obj.(*models.SGuest)
-
-		if guest.GetHypervisor() != api.HYPERVISOR_KVM {
-			return nil, errors.Wrapf(cloudprovider.ErrNotSupported, "not support associate eip for hypervisor %s", guest.GetHypervisor())
-		}
-
-		lockman.LockObject(ctx, guest)
-		defer lockman.ReleaseObject(ctx, guest)
-
-		var guestnics []models.SGuestnetwork
-		{
-			netq := models.NetworkManager.Query().SubQuery()
-			wirq := models.WireManager.Query().SubQuery()
-			vpcq := models.VpcManager.Query().SubQuery()
-			gneq := models.GuestnetworkManager.Query()
-			q := gneq.Equals("guest_id", guest.Id).
-				IsNullOrEmpty("eip_id")
-			q = q.Join(netq, sqlchemy.Equals(netq.Field("id"), gneq.Field("network_id")))
-			q = q.Join(wirq, sqlchemy.Equals(wirq.Field("id"), netq.Field("wire_id")))
-			q = q.Join(vpcq, sqlchemy.Equals(vpcq.Field("id"), wirq.Field("vpc_id")))
-			q = q.Filter(sqlchemy.NotEquals(vpcq.Field("id"), api.DEFAULT_VPC_ID))
-			if err := db.FetchModelObjects(models.GuestnetworkManager, q, &guestnics); err != nil {
-				return nil, errors.Wrapf(err, "db.FetchModelObjects")
-			}
-			if len(guestnics) == 0 {
-				return nil, errors.Errorf("guest has no nics to associate eip")
-			}
-		}
-
-		guestnic := &guestnics[0]
-		lockman.LockObject(ctx, guestnic)
-		defer lockman.ReleaseObject(ctx, guestnic)
-		if _, err := db.Update(guestnic, func() error {
-			guestnic.EipId = eip.Id
-			return nil
-		}); err != nil {
-			return nil, errors.Wrapf(err, "set associated eip for guestnic %s (guest:%s, network:%s)",
-				guestnic.Ifname, guestnic.GuestId, guestnic.NetworkId)
-		}
-
-		if err := eip.AssociateInstance(ctx, userCred, api.EIP_ASSOCIATE_TYPE_SERVER, guest); err != nil {
-			return nil, errors.Wrapf(err, "associate eip %s(%s) to vm %s(%s)", eip.Name, eip.Id, guest.Name, guest.Id)
-		}
-		if err := eip.SetStatus(userCred, api.EIP_STATUS_READY, api.EIP_STATUS_ASSOCIATE); err != nil {
-			return nil, errors.Wrapf(err, "set eip status to %s", api.EIP_STATUS_ALLOCATE)
-		}
-		return nil, nil
 	})
 	return nil
+}
+
+func (self *SKVMRegionDriver) requestAssociateEipWithServer(ctx context.Context, userCred mcclient.TokenCredential, eip *models.SElasticip, input api.ElasticipAssociateInput, obj db.IStatusStandaloneModel, task taskman.ITask) (jsonutils.JSONObject, error) {
+	guest := obj.(*models.SGuest)
+	if hyp := guest.GetHypervisor(); hyp != api.HYPERVISOR_KVM {
+		return nil, errors.Wrapf(cloudprovider.ErrNotSupported, "not support associate eip for hypervisor %s", hyp)
+	}
+
+	lockman.LockObject(ctx, guest)
+	defer lockman.ReleaseObject(ctx, guest)
+
+	var guestnics []models.SGuestnetwork
+	{
+		netq := models.NetworkManager.Query().SubQuery()
+		wirq := models.WireManager.Query().SubQuery()
+		vpcq := models.VpcManager.Query().SubQuery()
+		gneq := models.GuestnetworkManager.Query()
+		q := gneq.Equals("guest_id", guest.Id).
+			IsNullOrEmpty("eip_id")
+		q = q.Join(netq, sqlchemy.Equals(netq.Field("id"), gneq.Field("network_id")))
+		q = q.Join(wirq, sqlchemy.Equals(wirq.Field("id"), netq.Field("wire_id")))
+		q = q.Join(vpcq, sqlchemy.Equals(vpcq.Field("id"), wirq.Field("vpc_id")))
+		q = q.Filter(sqlchemy.NotEquals(vpcq.Field("id"), api.DEFAULT_VPC_ID))
+		if err := db.FetchModelObjects(models.GuestnetworkManager, q, &guestnics); err != nil {
+			return nil, errors.Wrapf(err, "db.FetchModelObjects")
+		}
+		if len(guestnics) == 0 {
+			return nil, errors.Errorf("guest has no nics to associate eip")
+		}
+	}
+
+	guestnic := &guestnics[0]
+	lockman.LockObject(ctx, guestnic)
+	defer lockman.ReleaseObject(ctx, guestnic)
+	if _, err := db.Update(guestnic, func() error {
+		guestnic.EipId = eip.Id
+		return nil
+	}); err != nil {
+		return nil, errors.Wrapf(err, "set associated eip for guestnic %s (guest:%s, network:%s)",
+			guestnic.Ifname, guestnic.GuestId, guestnic.NetworkId)
+	}
+
+	if err := eip.AssociateInstance(ctx, userCred, api.EIP_ASSOCIATE_TYPE_SERVER, guest); err != nil {
+		return nil, errors.Wrapf(err, "associate eip %s(%s) to vm %s(%s)", eip.Name, eip.Id, guest.Name, guest.Id)
+	}
+	if err := eip.SetStatus(userCred, api.EIP_STATUS_READY, api.EIP_STATUS_ASSOCIATE); err != nil {
+		return nil, errors.Wrapf(err, "set eip status to %s", api.EIP_STATUS_ALLOCATE)
+	}
+	return nil, nil
+}
+
+func (self *SKVMRegionDriver) requestAssociateEipWithLoadbalancer(
+	ctx context.Context,
+	userCred mcclient.TokenCredential,
+	eip *models.SElasticip,
+	input api.ElasticipAssociateInput,
+	obj db.IStatusStandaloneModel,
+	task taskman.ITask,
+) (jsonutils.JSONObject, error) {
+	lb := obj.(*models.SLoadbalancer)
+
+	if _, err := db.Update(lb, func() error {
+		lb.Address = eip.IpAddr
+		lb.AddressType = api.LB_ADDR_TYPE_INTERNET
+		return nil
+	}); err != nil {
+		return nil, errors.Wrap(err, "set loadbalancer address")
+	}
+
+	if err := eip.AssociateLoadbalancer(ctx, userCred, lb); err != nil {
+		return nil, errors.Wrapf(err, "associate eip %s(%s) to loadbalancer %s(%s)", eip.Name, eip.Id, lb.Name, lb.Id)
+	}
+	if err := eip.SetStatus(userCred, api.EIP_STATUS_READY, api.EIP_STATUS_ASSOCIATE); err != nil {
+		return nil, errors.Wrapf(err, "set eip status to %s", api.EIP_STATUS_ALLOCATE)
+	}
+	return nil, nil
 }

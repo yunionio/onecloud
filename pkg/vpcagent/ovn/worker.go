@@ -163,6 +163,9 @@ func (w *Worker) run(ctx context.Context, mss *agentmodels.ModelSets) (err error
 				}
 				ovndb.ClaimGuestnetwork(ctx, guestnetwork)
 			}
+			for _, loadbalancerNetwork := range network.LoadbalancerNetworks {
+				ovndb.ClaimLoadbalancerNetwork(ctx, loadbalancerNetwork)
+			}
 		}
 		routes := resolveRoutes(vpc, mss)
 		ovndb.ClaimRoutes(ctx, vpc, routes)

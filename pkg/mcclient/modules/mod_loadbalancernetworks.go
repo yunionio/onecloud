@@ -30,6 +30,7 @@ func init() {
 			"Network_ID",
 			"Network",
 			"Ip_Addr",
+			"Mac_Addr",
 		},
 		[]string{},
 		&Loadbalancers,
