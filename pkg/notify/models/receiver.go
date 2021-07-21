@@ -1286,15 +1286,6 @@ func (rm *SReceiverManager) FetchByIdOrNames(ctx context.Context, idOrNames ...s
 	return receivers, nil
 }
 
-func (r *SReceiver) GetExtraDetails(
-	ctx context.Context,
-	userCred mcclient.TokenCredential,
-	query jsonutils.JSONObject,
-	isList bool,
-) (api.ReceiverDetails, error) {
-	return api.ReceiverDetails{}, nil
-}
-
 func (r *SReceiver) SetContact(cType string, contact string) error {
 	if err := r.PullCache(false); err != nil {
 		return err
